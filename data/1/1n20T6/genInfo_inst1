@@ -1,0 +1,5 @@
+nr_periods nr_jobs nr_vehicles nr_reusables 
+6 20 2 3
+Vehicle information ( idx, cap reusables, cap nonreusables, cost_parameter, travel_parameter)
+0 9 2000 20 60
+1 12 3000 32 35

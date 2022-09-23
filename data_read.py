@@ -29,21 +29,21 @@ def load_data(path: str, instance: str):
 	return depot_data, jobs_data, travel_data, general_data, vehicle_data
 
 
-def get_data(periods, jobs, turbines, instance):
-	file = FILE_NAME.format(str(periods), str(jobs), str(turbines))
+def get_data(folder, jobs, turbines, instance):
+	file = FILE_NAME.format(str(folder), str(jobs), str(turbines))
 
-	path = BASE_PATH + "/data/" + str(periods) + "/" + file
+	path = BASE_PATH + "/data/" + str(folder) + "/" + file
 	return load_data(path, str(instance))
 
 
 def get_data_with_inputs():
-	periods = input("Select periods (1-3): ")
+	folder = input("Select folder (1-3): ")
 	jobs = input("Job Count: ")
 	turbines = input("Turbine Count: ")
 	instance = input("Instance (1-3): ")
 
-	file = FILE_NAME.format(periods, jobs, turbines)
+	file = FILE_NAME.format(folder, jobs, turbines)
 
-	path = BASE_PATH + "/data/" + periods + "/" + file
+	path = BASE_PATH + "/data/" + folder + "/" + file
 	return load_data(path, instance)
 

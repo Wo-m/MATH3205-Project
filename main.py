@@ -4,21 +4,15 @@ import data_read
 
 depot_data, jobs_data, travel_data, general_data, vehicle_data = data_read.get_data(1, 10, 3, 1)
 
-# reus is people, non reus is equipment
-DEPOT_JOB = 0
-
-# periods = int(general_data[0])
-# jobs = int(general_data[1])  # also num of turbines
-# vehicles = int(general_data[2])
-# people_types = int(general_data[3])
-
-periods = 1
-jobs = 3
-vehicles = 1
-people_types = 1
+periods = int(general_data[0])
+jobs = int(general_data[1])  # also num of turbines
+vehicles = int(general_data[2])
+people_types = int(general_data[3])
 
 # Create the nodes size = 2n+2 with final two nodes as depot pickup and delivery, n = num jobs
-N = 2 * jobs + 2
+N_d = [n for n in range(0, jobs)]
+N_p = [n for n in range(jobs, 2*jobs)]
+N = [n for n in range(0, 2*jobs + 2)]
 R = 0
 
 routes = {}  # route for vehicle v in period t on route r (dimensions will be expanded)
@@ -28,21 +22,6 @@ techs = {}  # number of reus of type p on vehicle v in period t on route r
 
 ttv = None
 tcv = None
-
-def generate_costs_and_times():
-    global ttv, tcv
-    ttv = np.zeros([len(vehicle_data), len(jobs_data), len(jobs_data)])
-    tcv = np.zeros([len(vehicle_data), len(jobs_data), len(jobs_data)])
-    for i, i_job in enumerate(jobs_data):
-        ix, iy = i_job[1], i_job[2]
-        for j, j_job in enumerate(jobs_data):
-            jx, jy = j_job[1], j_job[2]
-            distance = np.sqrt((ix - jx) ** 2 + (iy - jy) ** 2)
-            for v, vehicle in enumerate(vehicle_data):
-                c_rate, t_rate = vehicle[3], vehicle[4]
-                tcv[v, i, j] = c_rate * distance
-                ttv[v, i, j] = t_rate * distance
-
 
 def generate_routes():
     for t in range(periods):
@@ -60,15 +39,30 @@ def recursive_generation(v, t, J, j_start):
 
 def solve_route(v, t, J):
     global R
+    tc = tcv[v]
+    tt = ttv[v]
     routes[v, t, R] = J
     R += 1  # update index if feasible
-
 
 
 def solve_MILP():
     pass
 
 
-
-print([i for i in range(N)])
+"""
+HELPER METHODS
+"""
+def generate_costs_and_times():
+    global ttv, tcv
+    ttv = np.zeros([len(vehicle_data), len(jobs_data), len(jobs_data)])
+    tcv = np.zeros([len(vehicle_data), len(jobs_data), len(jobs_data)])
+    for i, i_job in enumerate(jobs_data):
+        ix, iy = i_job[1], i_job[2]
+        for j, j_job in enumerate(jobs_data):
+            jx, jy = j_job[1], j_job[2]
+            distance = np.sqrt((ix - jx) ** 2 + (iy - jy) ** 2)
+            for v, vehicle in enumerate(vehicle_data):
+                c_rate, t_rate = vehicle[3], vehicle[4]
+                tcv[v, i, j] = c_rate * distance
+                ttv[v, i, j] = t_rate * distance
 

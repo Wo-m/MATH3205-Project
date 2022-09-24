@@ -30,7 +30,7 @@ def generate_routes():
 
 
 def recursive_generation(v, t, J, j_start):
-    for j in range(j_start, jobs + 1):
+    for j in range(j_start, jobs):
         Jdash = J.copy()
         Jdash.append(j)
         solve_route(v, t, Jdash)

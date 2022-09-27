@@ -53,7 +53,8 @@ def recursive_generation(v, t, J, j_start):
 def solve_route(v, t, J):
     global R
     # pass data to MILP model in terms of vehicle v and period t
-    solve_MILP(J, tcv[v], ttv[v], tc[t], [st[j] for j in list(J)[:-2]], mt[v][t], c[v], jt, nt[t])
+
+    solve_MILP(J, tcv[v], ttv[v], tc[t], st, mt[v][t], c[v], jt, nt[t])
     routes[v, t, R] = J
     R += 1  # update index if feasible
 
@@ -158,7 +159,6 @@ def solve_MILP(J, travel_costs, travel_times, tech_costs, service_time, max_trav
         for j in N:
             if (X[i, j].x == 1):
                 print(i,j)
-    print(service_time)
 
 
 
@@ -190,16 +190,16 @@ def generate_data():
             distance = np.sqrt((ix - jx) ** 2 + (iy - jy) ** 2)
             for v, vehicle in enumerate(vehicle_data):
                 c_rate, t_rate = vehicle[3], vehicle[4]
-                tcv[v, i, j] = c_rate * distance
-                ttv[v, i, j] = t_rate * distance
+                tcv[v, i, j] = distance / c_rate
+                ttv[v, i, j] = distance / t_rate
 
                 # somewhat redundant but need drop and pick nodes
-                tcv[v, i + jobs, j + jobs] = c_rate * distance
-                ttv[v, i + jobs, j + jobs] = t_rate * distance
-                tcv[v, i, j + jobs] = c_rate * distance
-                ttv[v, i, j + jobs] = t_rate * distance
-                tcv[v, i + jobs, j] = c_rate * distance
-                ttv[v, i + jobs, j] = t_rate * distance
+                tcv[v, i + jobs, j + jobs] = distance / c_rate
+                ttv[v, i + jobs, j + jobs] = distance / t_rate
+                tcv[v, i, j + jobs] = distance / c_rate
+                ttv[v, i, j + jobs] = distance / t_rate
+                tcv[v, i + jobs, j] = distance / c_rate
+                ttv[v, i + jobs, j] = distance / t_rate
 
     for i, row in enumerate(travel_data):
         for j in range(vehicles):
@@ -221,18 +221,18 @@ def generate_data():
             distance = np.sqrt((ix)** 2 + (iy - 30) ** 2)
 
             for j in (0, jobs):
-                tcv[v, i + j, DEPOT_DROP] = c_rate * distance
-                ttv[v, i + j, DEPOT_DROP] = t_rate * distance
+                tcv[v, i + j, DEPOT_DROP] = distance / c_rate
+                ttv[v, i + j, DEPOT_DROP] = distance / t_rate
 
-                tcv[v, DEPOT_DROP, i + j] = c_rate * distance
-                ttv[v, DEPOT_DROP, i + j] = t_rate * distance
+                tcv[v, DEPOT_DROP, i + j] = distance / c_rate
+                ttv[v, DEPOT_DROP, i + j] = distance / t_rate
 
-                tcv[v, i + j, DEPOT_PICK] = c_rate * distance
-                ttv[v, i + j, DEPOT_PICK] = t_rate * distance
+                tcv[v, i + j, DEPOT_PICK] = distance / c_rate
+                ttv[v, i + j, DEPOT_PICK] = distance / t_rate
 
-                tcv[v, DEPOT_PICK, i + j] = c_rate * distance
-                ttv[v, DEPOT_PICK, i + j] = t_rate * distance
+                tcv[v, DEPOT_PICK, i + j] = distance / c_rate
+                ttv[v, DEPOT_PICK, i + j] = distance / t_rate
 
 
 generate_data()
-solve_route(0, 0, {DEPOT_DROP, 0, DEPOT_PICK})
+solve_route(0, 0, {DEPOT_DROP, 1, 2, DEPOT_PICK})

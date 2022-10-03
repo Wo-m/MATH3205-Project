@@ -25,7 +25,7 @@ def solve_MILP(J, travel_costs, travel_times, tech_costs, service_time, max_trav
     X = {(i, j): milp.addVar(vtype=GRB.BINARY) for i in N for j in N}  # binary travel from node i to j
     Y = {i: milp.addVar() for i in N}  # time vessel visits node i
     Z = {(p, i): milp.addVar(vtype=GRB.INTEGER) for p in P for i in N}  # techs of type p on ship after leaving node i
-    Q = {p: milp.addVar(=GRB.INTEGER) for p in P}  # techs of type p required
+    Q = {p: milp.addVar(vtype=GRB.INTEGER) for p in P}  # techs of type p required
 
 
     milp.setObjective(

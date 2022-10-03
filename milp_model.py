@@ -94,8 +94,4 @@ def solve_MILP(J, travel_costs, travel_times, tech_costs, service_time, max_trav
     milp.setParam("OutputFlag", 0)
     milp.optimize()
 
-
-
-
-
     return milp, X, Y, Z, Q, N

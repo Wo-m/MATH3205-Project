@@ -13,10 +13,12 @@ DEPOT_PICK = 2*jobs+1
 
 R = 0
 
+# Data passed to master solve
 routes = {}  # route for vehicle v in period t on route r (dimensions will be expanded)
 cost = {}  # cost for vehicle v in period t on route r (dimensions will be expanded)
 service = {}  # is vehicle v servicing job j in period t on route r
 techs = {}  # number of reus of type p on vehicle v in period t on route r
+route_indexes = {(v, t): [] for v in range(vehicles) for t in range(periods)}
 
 # feasibility dicts
 window = {}
@@ -86,8 +88,6 @@ def solve_route(v, t, J):
             return True
 
 
-
-
     # pass data to MILP model in terms of vehicle v and period t
     milp, X, Y, Z, Q, milp_nodes = solve_MILP(J, tcv[v], ttv[v], tc[t], st, mt[v][t],
                                         c[v], jt, nt[t], DEPOT_DROP, DEPOT_PICK, jobs, P)
@@ -106,7 +106,7 @@ def solve_route(v, t, J):
 
     window[frozenset(J), v] = (t, mt[v][t], True, R)
 
-    print(v, t, J)
+    route_indexes[v, t] = route_indexes[v, t] + [R]
 
     R += 1  # update index if feasible
     return True
@@ -190,8 +190,8 @@ def generate_data():
                 tcv[v, DEPOT_PICK, i + j] = distance / c_rate
                 ttv[v, DEPOT_PICK, i + j] = distance / t_rate
 
-def main():
+def milp():
     generate_data()
     generate_routes()
+    return routes, cost, service, techs, route_indexes, R
 
-main()

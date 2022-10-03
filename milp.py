@@ -1,101 +1,197 @@
-from gurobipy import *
+import numpy as np
+import data_read
+from milp_model import *
 
-def solve_MILP(J, travel_costs, travel_times, tech_costs, service_time, max_travel, capacity, job_techs, num_techs,
-                DEPOT_DROP, DEPOT_PICK, jobs, P):
-    """
-    All of these parameters are sourced from data with respect to vehicle, time period
-    :param travel_costs: from node i to j
-    :param travel_times: from node i to j
-    :param service_time: for node i
-    :param max_travel: constant value, max travel time
-    :param capacity: constant value, max capacity
-    :param job_techs: techs of type p required for job at node i
-    :param num_techs: number of techs of each type p available
-    :return: model
-    """
-    # global N, N_d, N_p, P   # Sets
+depot_data, jobs_data, travel_data, general_data, vehicle_data = data_read.get_data(1, 10, 3, 1)
 
-    # redefine sets in terms of J
-    N_d = [j for j in J][:-2]
-    N_p = [j+jobs for j in J][:-2]
-    N_star = N_d + N_p
-    N = N_star + [DEPOT_DROP, DEPOT_PICK]
+periods = int(general_data[0])
+jobs = int(general_data[1])  # also num of turbines
+vehicles = int(general_data[2])
+people_types = int(general_data[3])
+DEPOT_DROP = 2*jobs
+DEPOT_PICK = 2*jobs+1
 
-    milp = Model()
-    X = {(i, j): milp.addVar(vtype=GRB.BINARY) for i in N for j in N}  # binary travel from node i to j
-    Y = {i: milp.addVar() for i in N}  # time vessel visits node i
-    Z = {(p, i): milp.addVar(vtype=GRB.INTEGER) for p in P for i in N}  # techs of type p on ship after leaving node i
-    Q = {p: milp.addVar(vtype=GRB.INTEGER) for p in P}  # techs of type p required
+R = 0
+
+routes = {}  # route for vehicle v in period t on route r (dimensions will be expanded)
+cost = {}  # cost for vehicle v in period t on route r (dimensions will be expanded)
+service = {}  # is vehicle v servicing job j in period t on route r
+techs = {}  # number of reus of type p on vehicle v in period t on route r
+
+# feasibility dicts
+window = {}
+route_parts = {}
+
+# SETS
+N_d = [n for n in range(0, jobs)]  # drop nodes
+N_p = [n for n in range(jobs, 2*jobs)]  # pick nodes
+N = [n for n in range(0, 2*jobs + 2)]  # drop + pick + depot nodes
+P = [p for p in range(people_types)]  # people types
+
+# DATA
+ttv = None  # travel time from node i to j for vehicle v
+tcv = None  # travel cost from node i to j for vehicle v
+st = None  # service time for job i
+mt = None  # max travel time for vehicle v in period t
+c = None  # max capacity for vehicle v
+jt = None  # job techs of type p required for job i
+nt = None  # num techs of type p in period t
+tc = None  # cost of tech type p in period t
 
 
-    milp.setObjective(
-        quicksum(Q[p] * tech_costs[p] for p in P)
-        + quicksum(X[i, j]*travel_costs[i][j] for i in N for j in N),
-        GRB.MINIMIZE
-    )
+def generate_routes():
+    for t in range(periods):
+        for v in range(vehicles):
+            recursive_generation(v, t, [], 1)
+    print(routes, cost, service, techs)
 
-    # ------------ Constraints -------------
 
-    # Each node visited and left exactly once
-    visited_once = {i: milp.addConstr(quicksum(X[j, i] for j in N) == 1) for i in N_star}  # 1
-    leave_once = {i: milp.addConstr(quicksum(X[i, j] for j in N) == 1) for i in N_star}  # 2
+def recursive_generation(v, t, J, j_start):
+    for j in range(j_start, jobs):
+        Jdash = J.copy()
+        Jdash.append(j)
+        if solve_route(v, t, Jdash): # feasibility based on parts
+            recursive_generation(v, t, Jdash, j + 1)
 
-    # Leave and return to depot
-    leaves = milp.addConstr(quicksum(X[DEPOT_DROP, i] for i in N_d) == 1)  # 3
-    returns = milp.addConstr(quicksum(X[i, DEPOT_PICK] for i in N_p) == 1)  # 4
 
-    # cannot go from i->j and j->i
-    same_trip = None
+# Return false only when infeasible because of parts
+def solve_route(v, t, J):
+    global R, routes, cost, service, techs, window, route_parts
 
-    # depot cant go to pick node
-    leaves = milp.addConstr(quicksum(X[DEPOT_DROP, i] for i in N_p) == 0)  # 3
+    # calc parts for route
+    parts = route_parts.get(frozenset(J), 0)
+    if parts != 0:
+        sum = 0
+        for j in J:
+            sum += jobs_data[j][6]
+        route_parts[J] = parts
 
-    # drop node cant go to depot
-    returns = milp.addConstr(quicksum(X[i, DEPOT_PICK] for i in N_d) == 0)  # 4
+    # Check our ship can handle parts
+    if parts > vehicle_data[v][2]:
+        return False  # handles not solving supersets
 
-    # ensure time between drop off and pick up is greater than service time
-    job_time = {i: milp.addConstr(Y[jobs+i] - Y[i] >= service_time[i]) for i in N_d}  # 5
+    time = window.get((frozenset(J), v), -1)  # (period, window, feasibility)
 
-    # vessel stays with travel window
-    start_time = milp.addConstr(Y[DEPOT_DROP] == 0)  # 6
-    end_time = milp.addConstr(Y[DEPOT_PICK] <= max_travel)  # 7
+    if time != -1:
+        if time[2] and time[1] == mt[v][t]:  # solved for same time window
+            # use data from that solve
+            cost[v, t, R] = cost[v, time[0], time[3]]
+            for p in P:
+                techs[v, t, R, p] = techs[v, time[0], time[3], p]
+            for j in N:
+                service[v, t, R, j] = 1 if j in J else 0
+            routes[v, t, R] = routes[v, time[0], time[3]]
 
-    # ensure number of people on vessel does not exceed people available
-    num_people_max = {i: milp.addConstr(quicksum(Z[p, i] for p in P) <= capacity) for i in N}  # 8
-    num_people_zero = {i: milp.addConstr(quicksum(Z[p, i] for p in P) >= 0) for i in N}  # 9
-
-    # ensure number of techs required is <= techs available for each type
-    p_type = {(p, i): milp.addConstr(Z[p, i] <= num_techs[p]) for p in P for i in N}  # 10
-
-    # find number of techs required on vessl
-    p_num = {(p, i): milp.addConstr(Q[p] >= Z[p, i]) for p in P for i in N}  # 11
-
-    # Pick up and drop off flow constraints
-    drop_off_flow_lower = {(i, j, p): milp.addConstr(Z[p, i] - job_techs[j][p] - Z[p, j] >=
-                                                     -1*(1 - X[i, j]) * 2 * num_techs[p])
-                                                    for i in N_star for j in N_d for p in P}  # 12
-
-    drop_off_flow_upper = {(i, j, p): milp.addConstr(Z[p, i] - job_techs[j][p] - Z[p, j] <=
-                                                     (1 - X[i, j]) * 2 * num_techs[p])
-                                                    for i in N_star for j in N_d for p in P}  # 13
-
-    pick_up_flow_lower = {(i, j, p): milp.addConstr(Z[p, i] + job_techs[j-jobs][p] - Z[p, j] >=
-                                                    -1 * (1 - X[i, j]) * 2 * num_techs[p])
-                                                    for i in N_star for j in N_p for p in P}  # 15
-
-    pick_up_flow_upper = {(i, j, p): milp.addConstr(Z[p, i] + job_techs[j-jobs][p] - Z[p, j] <=
-                                                    (1 - X[i, j]) * 2 * num_techs[p])
-                                                    for i in N_star for j in N_p for p in P}  # 14
-
-    # Time Flow
-    time_flow ={(i, j): milp.addConstr(Y[i] + travel_times[i, j] - Y[j] <= (1-X[i, j]) * (max_travel * 2))
-                for i in N for j in N}
-
-    milp.setParam("OutputFlag", 0)
-    milp.optimize()
+        elif (not time[2]) and time[1] <= mt[v,t]:  # infeasible for same or smaller window
+            return True
 
 
 
 
+    # pass data to MILP model in terms of vehicle v and period t
+    milp, X, Y, Z, Q, milp_nodes = solve_MILP(J, tcv[v], ttv[v], tc[t], st, mt[v][t],
+                                        c[v], jt, nt[t], DEPOT_DROP, DEPOT_PICK, jobs, P)
 
-    return milp, X, Y, Z, Q, N
+    # infeasible model
+    if milp.Status != 2:
+        window[frozenset(J), v] = (t, mt[v][t], False, R)
+        return True
+
+    cost[v, t, R] = milp.objVal
+    for p in P:
+        techs[v, t, R, p] = Q[p].x
+    for j in N:
+        service[v, t, R, j] = 1 if j in J else 0
+    routes[v, t, R] = ordered_route(milp, X, milp_nodes)
+
+    window[frozenset(J), v] = (t, mt[v][t], True, R)
+
+    print(v, t, J)
+
+    R += 1  # update index if feasible
+    return True
+
+"""
+HELPER METHODS
+"""
+def ordered_route(milp, X, N):
+    node = DEPOT_DROP
+    ordered_route = [node]
+    while node != DEPOT_PICK:
+        for n in N:
+            if X[node, n].x == 1:
+                node = n
+                ordered_route.append(node)
+    return ordered_route
+
+def generate_data():
+    global ttv, tcv, tc, st, mt, c, jt, nt
+    ttv = np.zeros([vehicles, jobs*2+2, jobs*2+2])
+    tcv = np.zeros([vehicles, jobs*2+2, jobs*2+2])
+    st = np.zeros([len(jobs_data)])
+    mt = np.zeros([vehicles, periods])
+    c = np.zeros([vehicles])
+    jt = np.zeros([jobs, people_types])
+    nt = np.zeros([periods, people_types])
+    tc = np.zeros([periods, people_types])
+
+    for i, i_job in enumerate(jobs_data):
+        st[i] = i_job[7]
+
+        for n in range(people_types):
+            jt[i][n] = i_job[3 + n]
+
+        ix, iy = i_job[1], i_job[2]
+        for j, j_job in enumerate(jobs_data):
+            jx, jy = j_job[1], j_job[2]
+            distance = np.sqrt((ix - jx) ** 2 + (iy - jy) ** 2)
+            for v, vehicle in enumerate(vehicle_data):
+                c_rate, t_rate = vehicle[3], vehicle[4]
+                tcv[v, i, j] = distance / c_rate
+                ttv[v, i, j] = distance / t_rate
+
+                # somewhat redundant but need drop and pick nodes
+                tcv[v, i + jobs, j + jobs] = distance / c_rate
+                ttv[v, i + jobs, j + jobs] = distance / t_rate
+                tcv[v, i, j + jobs] = distance / c_rate
+                ttv[v, i, j + jobs] = distance / t_rate
+                tcv[v, i + jobs, j] = distance / c_rate
+                ttv[v, i + jobs, j] = distance / t_rate
+
+    for i, row in enumerate(travel_data):
+        for j in range(vehicles):
+            mt[j][i] = row[j]
+
+    for i, vehicle in enumerate(vehicle_data):
+        c[i] = vehicle[1]
+
+    for i, i_depot in enumerate(depot_data):
+        for n in range(people_types):
+            nt[i][n] = i_depot[n]
+            tc[i][n] = i_depot[n+3]
+
+    # calc distances to route nodes
+    for v, vehicle in enumerate(vehicle_data):
+        c_rate, t_rate = vehicle[3], vehicle[4]
+        for i, i_job in enumerate(jobs_data):
+            ix, iy = i_job[1], i_job[2]
+            distance = np.sqrt((ix)** 2 + (iy - 30) ** 2)
+
+            for j in (0, jobs):
+                tcv[v, i + j, DEPOT_DROP] = distance / c_rate
+                ttv[v, i + j, DEPOT_DROP] = distance / t_rate
+
+                tcv[v, DEPOT_DROP, i + j] = distance / c_rate
+                ttv[v, DEPOT_DROP, i + j] = distance / t_rate
+
+                tcv[v, i + j, DEPOT_PICK] = distance / c_rate
+                ttv[v, i + j, DEPOT_PICK] = distance / t_rate
+
+                tcv[v, DEPOT_PICK, i + j] = distance / c_rate
+                ttv[v, DEPOT_PICK, i + j] = distance / t_rate
+
+def main():
+    generate_data()
+    generate_routes()
+
+main()

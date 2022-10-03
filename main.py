@@ -18,6 +18,10 @@ cost = {}  # cost for vehicle v in period t on route r (dimensions will be expan
 service = {}  # is vehicle v servicing job j in period t on route r
 techs = {}  # number of reus of type p on vehicle v in period t on route r
 
+# feasibility dicts
+window = {}
+route_parts = {}
+
 # SETS
 N_d = [n for n in range(0, jobs)]  # drop nodes
 N_p = [n for n in range(jobs, 2*jobs)]  # pick nodes
@@ -46,30 +50,66 @@ def recursive_generation(v, t, J, j_start):
     for j in range(j_start, jobs):
         Jdash = J.copy()
         Jdash.append(j)
-        solve_route(v, t, Jdash)
-        recursive_generation(v, t, Jdash, j + 1)
+        if solve_route(v, t, Jdash): # feasibility based on parts
+            recursive_generation(v, t, Jdash, j + 1)
 
 
+# Return false only when infeasible because of parts
 def solve_route(v, t, J):
-    global R, routes, cost, service, techs
+    global R, routes, cost, service, techs, window, route_parts
+
+    # calc parts for route
+    parts = route_parts.get(frozenset(J), 0)
+    if parts != 0:
+        sum = 0
+        for j in J:
+            sum += jobs_data[j][6]
+        route_parts[J] = parts
+
+    # Check our ship can handle parts
+    if parts > vehicle_data[v][2]:
+        return False  # handles not solving supersets
+
+    time = window.get((frozenset(J), v), -1)  # (period, window, feasibility)
+
+    if time != -1:
+        if time[2] and time[1] == mt[v][t]:  # solved for same time window
+            # use data from that solve
+            cost[v, t, R] = cost[v, time[0], time[3]]
+            for p in P:
+                techs[v, t, R, p] = techs[v, time[0], time[3], p]
+            for j in N:
+                service[v, t, R, j] = 1 if j in J else 0
+            routes[v, t, R] = routes[v, time[0], time[3]]
+
+        elif (not time[2]) and time[1] <= mt[v,t]:  # infeasible for same or smaller window
+            return True
+
+
+
+
     # pass data to MILP model in terms of vehicle v and period t
-    milp, X, Y, Z, Q, N = solve_MILP(J, tcv[v], ttv[v], tc[t], st, mt[v][t],
+    milp, X, Y, Z, Q, milp_nodes = solve_MILP(J, tcv[v], ttv[v], tc[t], st, mt[v][t],
                                         c[v], jt, nt[t], DEPOT_DROP, DEPOT_PICK, jobs, P)
 
     # infeasible model
     if milp.Status != 2:
-        return
-    print(v, t, J)
+        window[frozenset(J), v] = (t, mt[v][t], False, R)
+        return True
+
     cost[v, t, R] = milp.objVal
     for p in P:
         techs[v, t, R, p] = Q[p].x
     for j in N:
         service[v, t, R, j] = 1 if j in J else 0
-    routes[v, t, R] = ordered_route(milp, X, N)
+    routes[v, t, R] = ordered_route(milp, X, milp_nodes)
 
+    window[frozenset(J), v] = (t, mt[v][t], True, R)
 
-    routes[v, t, R] = J
+    print(v, t, J)
+
     R += 1  # update index if feasible
+    return True
 
 """
 HELPER METHODS

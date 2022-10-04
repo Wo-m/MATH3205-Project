@@ -20,7 +20,7 @@ def load_data(path: str, instance: str):
 	# One type of data per file
 	depot_data = np.loadtxt(depots_path, delimiter=' ', skiprows=1)
 	jobs_data = np.loadtxt(jobs_path, delimiter=' ', skiprows=1, usecols=JOBS_COLS)
-	travel_data = np.loadtxt(travel_path, delimiter=' ', skiprows=1)
+	travel_data = np.loadtxt(travel_path, delimiter=' ')
 
 	# General file contains general and vehicle info
 	general_data = np.loadtxt(general_path, delimiter=' ', skiprows=1, max_rows=1)

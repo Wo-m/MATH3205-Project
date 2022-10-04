@@ -1,56 +1,59 @@
-import numpy as np
-
+import milp
 import data_read
+from gurobipy import *
 
 depot_data, jobs_data, travel_data, general_data, vehicle_data = data_read.get_data(1, 10, 3, 1)
 
-# reus is people, non reus is equipment
-DEPOT_JOB = 0
 
-# periods = int(general_data[0])
-# jobs = int(general_data[1])  # also num of turbines
-# vehicles = int(general_data[2])
-# people_types = int(general_data[3])
+def main():
+	ordered_routes, route_cost, service, people, routes_vt, num_routes = milp.milp()
+	service_cost, people_max = generate_data()
+	print(service_cost, people_max)
+	# Sets
+	R = [r for r in range(num_routes)]
+	V = [v for v in range(int(general_data[2]))]
+	T = [t for t in range(int(general_data[0]))]
+	P = [p for p in range(int(general_data[3]))]
+	J = [j for j in range(int(general_data[1]))]
 
-periods = 1
-jobs = 3
-vehicles = 1
-people_types = 1
+	# Data ---------------------
+	# routes_vt: v, t
+	# ordered_routes: v, t, r
+	# service_cost: t, j
+	# route_cost: v, t, r
+	# service: v, t, r, j
+	# people_max: p
+	# people: v, t, r, p
 
-# Create the nodes size = 2n+2 with final two nodes as depot pickup and delivery, n = num jobs
-N = 2*jobs + 2
-R = 0
+	model = Model()
 
-routes = {}  # route for vehicle v in period t on route r (dimensions will be expanded)
-cost = {}  # cost for vehicle v in period t on route r (dimensions will be expanded)
-service = {}  # is vehicle v servicing job j in period t on route r
-techs = {}  # number of reus of type p on vehicle v in period t on route r
+	# Variables
+	U = {(v, t, r): model.addVar(vtype=GRB.BINARY) for v in V for t in T for r in R}
 
-def get_routes():
-	pass
+	# Objective
+	model.setObjective(quicksum(U[v, t, r] *
+								(route_cost[v, t, r] + quicksum(service[v, t, r, j] * service_cost[t, j] for j in J))
+								for v in V for t in T for r in routes_vt[v, t]))
 
+	twenty = {(v, t): model.addConstr(quicksum(U[v, t, r] for r in routes_vt[v, t]) == 1) for v in V for t in T}
 
-def generate_routes():
-	for t in range(periods):
-		for v in range(vehicles):
-			recursive_generation(v, t, [DEPOT_JOB], 1)
+	twenty_one = {j: model.addConstr(quicksum(U[v, t, r]*service[v, t, r, j] for v in V for t in T for r in routes_vt[v, t]) == 1)
+				for j in J}
 
+	twenty_two = {(p, t): model.addConstr(quicksum(U[v, t, r] * people[v, t, r, p] for v in V for r in routes_vt[v, t]))
+				for p in P for t in T}
 
-def recursive_generation(v, t, J, j_start):
-	for j in range(j_start, jobs + 1):
-		Jdash = J.copy()
-		Jdash.append(j)
-		solve_route(v, t, Jdash)
-		recursive_generation(v, t, Jdash, j + 1)
+	model.optimize()
 
-
-def solve_route(v, t, J):
-	global R
-	routes[v, t, R] = J
-	R += 1  # update index if feasible
+def generate_data():
+	service_cost = {}
+	people_max = {}
+	for t in range(int(general_data[0])):
+		for j in range(int(general_data[1])):
+			service_cost[t, j] = jobs_data[j, t + 8]
+	for p in range(int(general_data[3])):
+		people_max[p] = depot_data[0][p]
+	return service_cost, people_max
 
 
-
-generate_routes()
-print(routes)
-
+main()

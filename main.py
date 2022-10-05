@@ -7,7 +7,6 @@ depot_data, jobs_data, travel_data, general_data, vehicle_data = data_read.get_d
 def main():
 	ordered_routes, route_cost, service, people, routes_vt, num_routes = milp.milp()
 	service_cost, people_max = generate_data()
-	print(service_cost, people_max)
 	# Sets
 	R = [r for r in range(num_routes)]
 	V = [v for v in range(int(general_data[2]))]

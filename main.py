@@ -44,6 +44,13 @@ def main():
 
 	model.optimize()
 
+	for t in T:
+		print("========DAY={}========".format(t))
+		for v in V:
+			for r in routes_vt[v, t]:
+				if U[v, t, r].x > 0.99:
+					print("Vehicle {}: {}".format(v, ordered_routes[v, t, r]))
+
 def generate_data():
 	service_cost = {}
 	people_max = {}

@@ -52,7 +52,7 @@ def recursive_generation(v, t, J, j_start):
     for j in range(j_start, jobs):
         Jdash = J.copy()
         Jdash.append(j)
-        if solve_route(v, t, Jdash): # feasibility based on parts
+        if solve_route(v, t, Jdash): # supersets can only be feasible if subset is
             recursive_generation(v, t, Jdash, j + 1)
 
 
@@ -63,16 +63,15 @@ def solve_route(v, t, J):
     # calc parts for route
     parts = route_parts.get(frozenset(J), 0)
     if parts == 0:
-        sum = 0
         for j in J:
-            sum += jobs_data[j][6]
+            parts += jobs_data[j][6]
         route_parts[frozenset(J)] = parts
 
     # Check our ship can handle parts
     if parts > vehicle_data[v][2]:
         return False  # handles not solving supersets
 
-    time = window.get((frozenset(J), v), -1)  # (period, window, feasibility)
+    time = window.get((frozenset(J), v), -1)  # (period, window, feasibility, route no.)
 
     if time != -1:
         if time[2] and time[1] == mt[v][t]:  # solved for same time window
@@ -86,7 +85,7 @@ def solve_route(v, t, J):
             R += 1
             return True
 
-        elif (not time[2]) and time[1] <= mt[v,t]:  # infeasible for same or smaller window
+        elif (not time[2]) and time[1] <= mt[v][t]:  # infeasible for same or smaller window
             return False
 
 

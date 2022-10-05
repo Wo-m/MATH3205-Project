@@ -4,11 +4,9 @@ from gurobipy import *
 
 depot_data, jobs_data, travel_data, general_data, vehicle_data = data_read.get_data(1, 10, 3, 1)
 
-
 def main():
 	ordered_routes, route_cost, service, people, routes_vt, num_routes = milp.milp()
 	service_cost, people_max = generate_data()
-	print(service_cost, people_max)
 	# Sets
 	R = [r for r in range(num_routes)]
 	V = [v for v in range(int(general_data[2]))]
@@ -35,15 +33,22 @@ def main():
 								(route_cost[v, t, r] + quicksum(service[v, t, r, j] * service_cost[t, j] for j in J))
 								for v in V for t in T for r in routes_vt[v, t]))
 
-	twenty = {(v, t): model.addConstr(quicksum(U[v, t, r] for r in routes_vt[v, t]) == 1) for v in V for t in T}
+	one_route_per_vehicle_time = {(v, t): model.addConstr(quicksum(U[v, t, r] for r in routes_vt[v, t]) <= 1) for v in V for t in T}
 
-	twenty_one = {j: model.addConstr(quicksum(U[v, t, r]*service[v, t, r, j] for v in V for t in T for r in routes_vt[v, t]) == 1)
+	each_turbine_serviced = {j: model.addConstr(quicksum(U[v, t, r]*service[v, t, r, j] for v in V for t in T for r in routes_vt[v, t]) == 1)
 				for j in J}
 
-	twenty_two = {(p, t): model.addConstr(quicksum(U[v, t, r] * people[v, t, r, p] for v in V for r in routes_vt[v, t]))
+	twenty_two = {(p, t): model.addConstr(quicksum(U[v, t, r] * people[v, t, r, p] for v in V for r in routes_vt[v, t]) <= people_max[p])
 				for p in P for t in T}
 
 	model.optimize()
+
+	for t in T:
+		print("========DAY={}========".format(t))
+		for v in V:
+			for r in routes_vt[v, t]:
+				if U[v, t, r].x > 0.99:
+					print("Vehicle {}: {}".format(v, ordered_routes[v, t, r]))
 
 def generate_data():
 	service_cost = {}

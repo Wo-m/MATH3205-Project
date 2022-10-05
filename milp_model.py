@@ -16,8 +16,8 @@ def solve_MILP(J, travel_costs, travel_times, tech_costs, service_time, max_trav
     # global N, N_d, N_p, P   # Sets
 
     # redefine sets in terms of J
-    N_d = [j for j in J][:-2]
-    N_p = [j+jobs for j in J][:-2]
+    N_d = [j for j in J]
+    N_p = [j+jobs for j in J]
     N_star = N_d + N_p
     N = N_star + [DEPOT_DROP, DEPOT_PICK]
 

@@ -1,7 +1,7 @@
 from gurobipy import *
 
-def solve_MILP(J, travel_costs, travel_times, tech_costs, service_time, max_travel, capacity, job_techs, num_techs,
-                DEPOT_DROP, DEPOT_PICK, jobs, P):
+def build_MILP(jobs, travel_costs, travel_times, tech_costs, service_time, max_travel, capacity,
+               job_techs, num_techs, P, X, Y, Z, Q):
     """
     All of these parameters are sourced from data with respect to vehicle, time period
     :param travel_costs: from node i to j
@@ -16,21 +16,22 @@ def solve_MILP(J, travel_costs, travel_times, tech_costs, service_time, max_trav
     # global N, N_d, N_p, P   # Sets
 
     # redefine sets in terms of J
-    N_d = [j for j in J]
-    N_p = [j+jobs for j in J]
+    DEPOT_DROP = 2*jobs
+    DEPOT_PICK = 2*jobs + 1
+    N_d = [j for j in range(jobs)]
+    N_p = [j for j in range(jobs, 2*jobs)]
     N_star = N_d + N_p
     N = N_star + [DEPOT_DROP, DEPOT_PICK]
 
     milp = Model()
-    X = {(i, j): milp.addVar(vtype=GRB.BINARY) for i in N for j in N}  # binary travel from node i to j
-    Y = {i: milp.addVar() for i in N}  # time vessel visits node i
-    Z = {(p, i): milp.addVar(vtype=GRB.INTEGER) for p in P for i in N}  # techs of type p on ship after leaving node i
-    Q = {p: milp.addVar(vtype=GRB.INTEGER) for p in P}  # techs of type p required
-
+    X.update({(i, j): milp.addVar(vtype=GRB.BINARY) for i in N for j in N})  # binary travel from node i to j
+    Y.update({i: milp.addVar() for i in N})  # time vessel visits node i
+    Z.update({(p, i): milp.addVar(vtype=GRB.INTEGER) for p in P for i in N} ) # techs of type p on ship after leaving node i
+    Q.update({p: milp.addVar(vtype=GRB.INTEGER) for p in P})  # techs of type p required
 
     milp.setObjective(
         quicksum(Q[p] * tech_costs[p] for p in P)
-        + quicksum(X[i, j]*travel_costs[i][j] for i in N for j in N),
+        + quicksum(X[i, j] * travel_costs[i][j] for i in N for j in N),
         GRB.MINIMIZE
     )
 
@@ -92,6 +93,22 @@ def solve_MILP(J, travel_costs, travel_times, tech_costs, service_time, max_trav
                 for i in N for j in N}
 
     milp.setParam("OutputFlag", 0)
-    milp.optimize()
+    milp.setParam("Presolve", 2)
 
-    return milp, X, Y, Z, Q, N
+    return milp, visited_once, leave_once
+
+def solve_MILP(model, J, jobs):
+    """
+    Updates model to only consider jobs in J by forcing visited once and leave once constraints
+    :param model: (milp, c1, c2) tuple
+    :param J: set of jobs
+    :param jobs: number of turbines in whole OWF
+    """
+    milp, c1, c2 = model    # c1: node visited constraint, c2: node left constraint
+    for j in range(jobs):
+        rhs = 1 if j in J else 0
+        for o in (0, jobs):
+            c1[j + o].rhs = rhs
+            c2[j + o].rhs = rhs
+    milp.optimize()
+    return milp

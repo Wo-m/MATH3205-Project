@@ -40,24 +40,31 @@ jt = None  # job techs of type p required for job i
 nt = None  # num techs of type p in period t
 tc = None  # cost of tech type p in period t
 
+# Vars
+X = {}
+Y = {}
+Z = {}
+Q = {}
+
 
 def generate_routes():
     for t in range(periods):
         for v in range(vehicles):
-            recursive_generation(v, t, [], 0)
-    print(routes, cost, service, techs)
+            model = build_MILP(jobs, tcv[v], ttv[v], tc[t], st, mt[v][t],
+                                        c[v], jt, nt[t], P, X, Y, Z, Q)
+            recursive_generation(model, v, t, [], 0)
 
 
-def recursive_generation(v, t, J, j_start):
+def recursive_generation(model, v, t, J, j_start):
     for j in range(j_start, jobs):
         Jdash = J.copy()
         Jdash.append(j)
-        if solve_route(v, t, Jdash): # supersets can only be feasible if subset is
-            recursive_generation(v, t, Jdash, j + 1)
+        if solve_route(model, v, t, Jdash): # supersets can only be feasible if subset is
+            recursive_generation(model, v, t, Jdash, j + 1)
 
 
 # Return false only when infeasible because of parts
-def solve_route(v, t, J):
+def solve_route(model, v, t, J):
     global R, routes, cost, service, techs, window, route_parts
 
     # calc parts for route
@@ -91,8 +98,7 @@ def solve_route(v, t, J):
 
 
     # pass data to MILP model in terms of vehicle v and period t
-    milp, X, Y, Z, Q, milp_nodes = solve_MILP(J, tcv[v], ttv[v], tc[t], st, mt[v][t],
-                                        c[v], jt, nt[t], DEPOT_DROP, DEPOT_PICK, jobs, P)
+    milp = solve_MILP(model, J, jobs)
 
     # infeasible model
     if milp.Status != 2:
@@ -104,7 +110,7 @@ def solve_route(v, t, J):
         techs[v, t, R, p] = Q[p].x
     for j in N_d:
         service[v, t, R, j] = 1 if j in J else 0
-    routes[v, t, R] = ordered_route(milp, X, milp_nodes)
+    routes[v, t, R] = ordered_route(milp, X, J)
 
     window[frozenset(J), v] = (t, mt[v][t], True, R)
 
@@ -116,12 +122,13 @@ def solve_route(v, t, J):
 """
 HELPER METHODS
 """
-def ordered_route(milp, X, N):
+def ordered_route(milp, X, J):
     node = DEPOT_DROP
     ordered_route = [node]
+    N = [DEPOT_DROP] + [j for j in J] + [j + jobs for j in J] + [DEPOT_PICK]
     while node != DEPOT_PICK:
         for n in N:
-            if X[node, n].x == 1:
+            if X[node, n].x > 0.99:
                 node = n
                 ordered_route.append(node)
     return ordered_route
@@ -191,6 +198,7 @@ def generate_data():
 
                 tcv[v, DEPOT_PICK, i + d] = distance * c_rate
                 ttv[v, DEPOT_PICK, i + d] = distance / t_rate
+
 
 def milp():
     generate_data()

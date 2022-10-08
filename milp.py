@@ -82,6 +82,7 @@ def solve_route(v, t, J):
             for j in N:
                 service[v, t, R, j] = 1 if j in J else 0
             routes[v, t, R] = routes[v, time[0], time[3]]
+            route_indexes[v, t] = route_indexes[v, t] + [R]
             R += 1
             return True
 
@@ -148,15 +149,15 @@ def generate_data():
             distance = np.sqrt((ix - jx) ** 2 + (iy - jy) ** 2)
             for v, vehicle in enumerate(vehicle_data):
                 c_rate, t_rate = vehicle[3], vehicle[4]
-                tcv[v, i, j] = distance / c_rate
+                tcv[v, i, j] = distance * c_rate
                 ttv[v, i, j] = distance / t_rate
 
                 # somewhat redundant but need drop and pick nodes
-                tcv[v, i + jobs, j + jobs] = distance / c_rate
+                tcv[v, i + jobs, j + jobs] = distance * c_rate
                 ttv[v, i + jobs, j + jobs] = distance / t_rate
-                tcv[v, i, j + jobs] = distance / c_rate
+                tcv[v, i, j + jobs] = distance * c_rate
                 ttv[v, i, j + jobs] = distance / t_rate
-                tcv[v, i + jobs, j] = distance / c_rate
+                tcv[v, i + jobs, j] = distance * c_rate
                 ttv[v, i + jobs, j] = distance / t_rate
 
     for i, row in enumerate(travel_data):
@@ -176,20 +177,20 @@ def generate_data():
         c_rate, t_rate = vehicle[3], vehicle[4]
         for i, i_job in enumerate(jobs_data):
             ix, iy = i_job[1], i_job[2]
-            distance = np.sqrt((ix)** 2 + (iy - 30) ** 2)
+            distance = np.sqrt(ix** 2 + (iy - 30) ** 2)
 
-            for j in (0, jobs):
-                tcv[v, i + j, DEPOT_DROP] = distance / c_rate
-                ttv[v, i + j, DEPOT_DROP] = distance / t_rate
+            for d in (0, jobs):
+                tcv[v, i + d, DEPOT_DROP] = distance * c_rate
+                ttv[v, i + d, DEPOT_DROP] = distance / t_rate
 
-                tcv[v, DEPOT_DROP, i + j] = distance / c_rate
-                ttv[v, DEPOT_DROP, i + j] = distance / t_rate
+                tcv[v, DEPOT_DROP, i + d] = distance * c_rate
+                ttv[v, DEPOT_DROP, i + d] = distance / t_rate
 
-                tcv[v, i + j, DEPOT_PICK] = distance / c_rate
-                ttv[v, i + j, DEPOT_PICK] = distance / t_rate
+                tcv[v, i + d, DEPOT_PICK] = distance * c_rate
+                ttv[v, i + d, DEPOT_PICK] = distance / t_rate
 
-                tcv[v, DEPOT_PICK, i + j] = distance / c_rate
-                ttv[v, DEPOT_PICK, i + j] = distance / t_rate
+                tcv[v, DEPOT_PICK, i + d] = distance * c_rate
+                ttv[v, DEPOT_PICK, i + d] = distance / t_rate
 
 def milp():
     generate_data()

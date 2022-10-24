@@ -71,24 +71,26 @@ def solve_route(v, t, J):
     if parts > vehicle_data[v][2]:
         return False  # handles not solving supersets
 
-    time = window.get((frozenset(J), v), -1)  # (period, window, feasibility, route no.)
+    previous_results = window.get((frozenset(J), v), -1)  # (period, window, feasibility, route no.)
 
-    if time != -1:
-        if time[2] and time[1] == mt[v][t]:  # solved for same time window
-            # use data from that solve
-            cost[v, t, R] = cost[v, time[0], time[3]]
-            for p in P:
-                techs[v, t, R, p] = techs[v, time[0], time[3], p]
-            for j in N:
-                service[v, t, R, j] = 1 if j in J else 0
-            routes[v, t, R] = routes[v, time[0], time[3]]
-            route_indexes[v, t] = route_indexes[v, t] + [R]
-            R += 1
-            return True
+    if previous_results != -1:
+        for time in previous_results:
+            if time[2] and time[1] == mt[v][t]:  # solved for same time window
+                # use data from that solve
+                cost[v, t, R] = cost[v, time[0], time[3]]
+                for p in P:
+                    techs[v, t, R, p] = techs[v, time[0], time[3], p]
+                for j in N:
+                    service[v, t, R, j] = 1 if j in J else 0
+                routes[v, t, R] = routes[v, time[0], time[3]]
+                route_indexes[v, t] = route_indexes[v, t] + [R]
+                R += 1
+                return True
 
-        elif (not time[2]) and time[1] <= mt[v][t]:  # infeasible for same or smaller window
-            return False
-
+            elif (not time[2]) and time[1] <= mt[v][t]:  # infeasible for same or smaller window
+                return False
+    else:
+        window[frozenset(J), v] = []
 
     # pass data to MILP model in terms of vehicle v and period t
     milp, X, Y, Z, Q, milp_nodes = solve_MILP(J, tcv[v], ttv[v], tc[t], st, mt[v][t],
@@ -96,7 +98,7 @@ def solve_route(v, t, J):
 
     # infeasible model
     if milp.Status != 2:
-        window[frozenset(J), v] = (t, mt[v][t], False, R)
+        window[frozenset(J), v].append((t, mt[v][t], False, R))
         return False
 
     cost[v, t, R] = milp.objVal
@@ -106,7 +108,7 @@ def solve_route(v, t, J):
         service[v, t, R, j] = 1 if j in J else 0
     routes[v, t, R] = ordered_route(milp, X, milp_nodes)
 
-    window[frozenset(J), v] = (t, mt[v][t], True, R)
+    window[frozenset(J), v].append((t, mt[v][t], True, R))
 
     route_indexes[v, t] = route_indexes[v, t] + [R]
 

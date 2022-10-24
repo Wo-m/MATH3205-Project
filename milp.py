@@ -42,6 +42,9 @@ tc = None  # cost of tech type p in period t
 
 
 def generate_routes():
+    """
+    Generates all feasible ordered routes
+    """
     for t in range(periods):
         for v in range(vehicles):
             recursive_generation(v, t, [], 0)
@@ -49,15 +52,37 @@ def generate_routes():
 
 
 def recursive_generation(v, t, J, j_start):
+    """
+    Recursive generation of the unique job sets
+    (calls solve_ordered_routes to get feasbile permutations of the sets)
+
+    Params:
+        v (int): vehicle used
+        t (int): time period
+        J (set(int)): unique set of routes
+        j_start (int): j index to generate from
+    """
+    
     for j in range(j_start, jobs):
         Jdash = J.copy()
         Jdash.append(j)
-        if solve_route(v, t, Jdash): # supersets can only be feasible if subset is
+        feasible = solve_ordered_routes(v, t, Jdash)  # solve all permutations of a route set
+        if feasible:  # supersets can only be feasible if subset is
             recursive_generation(v, t, Jdash, j + 1)
 
 
-# Return false only when infeasible because of parts
-def solve_route(v, t, J):
+def solve_ordered_routes(v, t, J):
+    """
+    Solve all permutations of the route set J
+
+    Params:
+        v (int): vehicle used
+        t (int): time period
+        J (set(int)): unique set of routes
+
+    Returns:
+        bool: feasibility
+    """
     global R, routes, cost, service, techs, window, route_parts
 
     # calc parts for route

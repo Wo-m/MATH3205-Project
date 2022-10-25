@@ -1,64 +1,67 @@
-import milp
+from milp import *
 import data_read
 from gurobipy import *
 
-depot_data, jobs_data, travel_data, general_data, vehicle_data = data_read.get_data(1, 10, 3, 1)
-
 def main():
-	ordered_routes, route_cost, service, people, routes_vt, num_routes = milp.milp()
-	service_cost, people_max = generate_data()
-	# Sets
-	R = [r for r in range(num_routes)]
-	V = [v for v in range(int(general_data[2]))]
-	T = [t for t in range(int(general_data[0]))]
-	P = [p for p in range(int(general_data[3]))]
-	J = [j for j in range(int(general_data[1]))]
+    start = time.time()
+    service_cost, people_max = generate_data()
 
-	# Data ---------------------
-	# routes_vt: v, t
-	# ordered_routes: v, t, r
-	# service_cost: t, j
-	# route_cost: v, t, r
-	# service: v, t, r, j
-	# people_max: p
-	# people: v, t, r, p
+    # run milp, note import everything from milp
+    ordered_routes, route_cost, service, people, routes_vt, num_routes = milp()
+    # Sets
+    R = [r for r in range(num_routes)]
+    V = [v for v in range(int(general_data[2]))]
+    T = [t for t in range(int(general_data[0]))]
+    P = [p for p in range(int(general_data[3]))]
+    J = [j for j in range(int(general_data[1]))]
 
-	model = Model()
+    # Data ---------------------
+    # routes_vt: v, t
+    # ordered_routes: v, t, r
+    # service_cost: t, j
+    # route_cost: v, t, r
+    # service: v, t, r, j
+    # people_max: p
+    # people: v, t, r, p
 
-	# Variables
-	U = {(v, t, r): model.addVar(vtype=GRB.BINARY) for v in V for t in T for r in R}
+    model = Model()
 
-	# Objective
-	model.setObjective(quicksum(U[v, t, r] *
-								(route_cost[v, t, r] + quicksum(service[v, t, r, j] * service_cost[t, j] for j in J))
-								for v in V for t in T for r in routes_vt[v, t]))
+    # Variables
+    U = {(v, t, r): model.addVar(vtype=GRB.BINARY) for v in V for t in T for r in R}
 
-	one_route_per_vehicle_time = {(v, t): model.addConstr(quicksum(U[v, t, r] for r in routes_vt[v, t]) <= 1) for v in V for t in T}
+    # Objective
+    model.setObjective(quicksum(U[v, t, r] *
+                                (route_cost[v, t, r] + quicksum(service[v, t, r, j] * service_cost[t, j] for j in J))
+                                for v in V for t in T for r in routes_vt[v, t]))
 
-	each_turbine_serviced = {j: model.addConstr(quicksum(U[v, t, r]*service[v, t, r, j] for v in V for t in T for r in routes_vt[v, t]) == 1)
-				for j in J}
+    one_route_per_vehicle_time = {(v, t): model.addConstr(quicksum(U[v, t, r] for r in routes_vt[v, t]) <= 1) for v in V for t in T}
 
-	twenty_two = {(p, t): model.addConstr(quicksum(U[v, t, r] * people[v, t, r, p] for v in V for r in routes_vt[v, t]) <= people_max[p])
-				for p in P for t in T}
+    each_turbine_serviced = {j: model.addConstr(quicksum(U[v, t, r]*service[v, t, r, j] for v in V for t in T for r in routes_vt[v, t]) == 1)
+                for j in J}
 
-	model.optimize()
+    twenty_two = {(p, t): model.addConstr(quicksum(U[v, t, r] * people[v, t, r, p] for v in V for r in routes_vt[v, t]) <= people_max[p])
+                for p in P for t in T}
 
-	for t in T:
-		print("========DAY={}========".format(t))
-		for v in V:
-			for r in routes_vt[v, t]:
-				if U[v, t, r].x > 0.99:
-					print("Vehicle {}: {}".format(v, ordered_routes[v, t, r]))
+    model.optimize()
+
+    end = time.time()
+    print('total time', end-start)
+    for t in T:
+        print("========DAY={}========".format(t))
+        for v in V:
+            for r in routes_vt[v, t]:
+                if U[v, t, r].x > 0.99:
+                    print("Vehicle {}: {}".format(v, ordered_routes[v, t, r]))
 
 def generate_data():
-	service_cost = {}
-	people_max = {}
-	for t in range(int(general_data[0])):
-		for j in range(int(general_data[1])):
-			service_cost[t, j] = jobs_data[j, t + 8]
-	for p in range(int(general_data[3])):
-		people_max[p] = depot_data[0][p]
-	return service_cost, people_max
+    service_cost = {}
+    people_max = {}
+    for t in range(int(general_data[0])):
+        for j in range(int(general_data[1])):
+            service_cost[t, j] = jobs_data[j, t + 8]
+    for p in range(int(general_data[3])):
+        people_max[p] = depot_data[0][p]
+    return service_cost, people_max
 
 
 main()

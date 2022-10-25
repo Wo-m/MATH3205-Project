@@ -2,8 +2,11 @@ import numpy as np
 import data_read
 import itertools
 from milp_model import *
+import time
 
-depot_data, jobs_data, travel_data, general_data, vehicle_data = data_read.get_data(1, 10, 3, 1)
+FOLDER, JOBS, PERIODS, INSTANCE = 1, 15, 5, 1
+
+depot_data, jobs_data, travel_data, general_data, vehicle_data = data_read.get_data(FOLDER, JOBS, PERIODS, INSTANCE)
 
 periods = int(general_data[0])
 jobs = int(general_data[1])  # also num of turbines
@@ -46,7 +49,10 @@ def generate_routes():
 
     for t in range(periods):
         for v in range(vehicles):
+            start = time.time()
             recursive_generation(v, t, [], 0)
+            end = time.time()
+            print(t,v,R, end-start)
 
 
 def recursive_generation(v, t, J, j_start):
@@ -122,6 +128,8 @@ def solve_ordered_routes(v, t, J):
     # route_perms = [[1,11,7,5,15,17]]
 
     solved_routes = []  # solved ordered routes
+    # print('nodes', len(nodes))
+    # print('perms', len(route_perms))
     for route in route_perms:
         feasible = True
 
@@ -170,7 +178,7 @@ def solve_ordered_routes(v, t, J):
 
             # Personnel Available
             for p in P:
-                if personnel[p] > nt[p][t]:
+                if personnel[p] > nt[t][p]:
                     feasible = False
                     break
 
@@ -188,7 +196,7 @@ def solve_ordered_routes(v, t, J):
         route_cost += tcv[v][current_node][DEPOT_PICK]
 
         for p in P:
-            route_cost += tc[p, t]*max_personnel[p]
+            route_cost += tc[t][p]*max_personnel[p]
 
         # recheck time constraint
         if time > mt[v][t]:
@@ -196,9 +204,9 @@ def solve_ordered_routes(v, t, J):
 
         if feasible:
             solved_routes.append((route, route_cost, max_personnel))
-            print(time)
-            print(route_cost)
-            print(route)
+            # print(time)
+            # print(route_cost)
+            # print(route)
 
     # Get best route
     if len(solved_routes) > 0:
@@ -342,11 +350,3 @@ def milp():
     generate_data()
     generate_routes()
     return routes, cost, service, techs, route_indexes, R
-
-# print(get_feasible_permutations([0,10, 1, 11]))
-
-generate_data()
-solve_ordered_routes(1, 0, [0,1,2])
-
-
-# milp()

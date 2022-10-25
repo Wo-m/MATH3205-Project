@@ -1,5 +1,6 @@
 import numpy as np
 import data_read
+import itertools
 from milp_model import *
 
 depot_data, jobs_data, travel_data, general_data, vehicle_data = data_read.get_data(1, 10, 3, 1)
@@ -14,8 +15,8 @@ DEPOT_PICK = 2*jobs+1
 R = 0
 
 # Data passed to master solve
-routes = {}  # route for vehicle v in period t on route r (dimensions will be expanded)
-cost = {}  # cost for vehicle v in period t on route r (dimensions will be expanded)
+routes = {}  # route for vehicle v in period t on route r
+cost = {}  # cost for vehicle v in period t on route r
 service = {}  # is vehicle v servicing job j in period t on route r
 techs = {}  # number of reus of type p on vehicle v in period t on route r
 route_indexes = {(v, t): [] for v in range(vehicles) for t in range(periods)}
@@ -24,10 +25,7 @@ route_indexes = {(v, t): [] for v in range(vehicles) for t in range(periods)}
 window = {}
 route_parts = {}
 
-# SETS
 N_d = [n for n in range(0, jobs)]  # drop nodes
-N_p = [n for n in range(jobs, 2*jobs)]  # pick nodes
-N = [n for n in range(0, 2*jobs + 2)]  # drop + pick + depot nodes
 P = [p for p in range(people_types)]  # people types
 
 # DATA
@@ -45,16 +43,16 @@ def generate_routes():
     """
     Generates all feasible ordered routes
     """
+
     for t in range(periods):
         for v in range(vehicles):
             recursive_generation(v, t, [], 0)
-    print(routes, cost, service, techs)
 
 
 def recursive_generation(v, t, J, j_start):
     """
     Recursive generation of the unique job sets
-    (calls solve_ordered_routes to get feasbile permutations of the sets)
+    (calls solve_ordered_routes to get feasbile NODE permutations of the JOB sets)
 
     Params:
         v (int): vehicle used
@@ -73,7 +71,7 @@ def recursive_generation(v, t, J, j_start):
 
 def solve_ordered_routes(v, t, J):
     """
-    Solve all permutations of the route set J
+    Solve all NODE permutations of the JOB set J
 
     Params:
         v (int): vehicle used
@@ -85,7 +83,8 @@ def solve_ordered_routes(v, t, J):
     """
     global R, routes, cost, service, techs, window, route_parts
 
-    # calc parts for route
+
+    # Parts Constraint (Feasibility is independant of order)
     parts = route_parts.get(frozenset(J), 0)
     if parts == 0:
         for j in J:
@@ -94,62 +93,184 @@ def solve_ordered_routes(v, t, J):
 
     # Check our ship can handle parts
     if parts > vehicle_data[v][2]:
-        return False  # handles not solving supersets
+        return False  # infeasible set
 
-    time = window.get((frozenset(J), v), -1)  # (period, window, feasibility, route no.)
-
-    if time != -1:
-        if time[2] and time[1] == mt[v][t]:  # solved for same time window
-            # use data from that solve
-            cost[v, t, R] = cost[v, time[0], time[3]]
-            for p in P:
-                techs[v, t, R, p] = techs[v, time[0], time[3], p]
-            for j in N:
-                service[v, t, R, j] = 1 if j in J else 0
-            routes[v, t, R] = routes[v, time[0], time[3]]
-            route_indexes[v, t] = route_indexes[v, t] + [R]
-            R += 1
-            return True
-
-        elif (not time[2]) and time[1] <= mt[v][t]:  # infeasible for same or smaller window
-            return False
-
-
-    # pass data to MILP model in terms of vehicle v and period t
-    milp, X, Y, Z, Q, milp_nodes = solve_MILP(J, tcv[v], ttv[v], tc[t], st, mt[v][t],
-                                        c[v], jt, nt[t], DEPOT_DROP, DEPOT_PICK, jobs, P)
-
-    # infeasible model
-    if milp.Status != 2:
-        window[frozenset(J), v] = (t, mt[v][t], False, R)
+    # infeasible for smaller window, therefore infeasible set
+    time = window.get((frozenset(J), v), -1)  # (period, window, feasibility, solved_routes)
+    if time != -1 and (not time[2] and time[1] <= mt[v][t]):  # infeasible for same or smaller window
         return False
+    elif time != -1 and (time[2] and time[1] == mt[v][t]):  # solved for same time window)
+        for route, r_c, personnel in time[3]:
+            routes[v,t,R] = route
+            cost[v,t,R] = r_c
+            for j in N_d:
+                service[v, t, R, j] = 1 if j in J else 0
+            for p in P:
+                techs[v,t,R,p] = personnel[p]
+            route_indexes[v,t].append(R)
 
-    cost[v, t, R] = milp.objVal
-    for p in P:
-        techs[v, t, R, p] = Q[p].x
-    for j in N_d:
-        service[v, t, R, j] = 1 if j in J else 0
-    routes[v, t, R] = ordered_route(milp, X, milp_nodes)
 
-    window[frozenset(J), v] = (t, mt[v][t], True, R)
+    nodes = []
+    for j in J:
+        nodes.append(j)
+        nodes.append(j+jobs)
 
-    route_indexes[v, t] = route_indexes[v, t] + [R]
 
-    R += 1  # update index if feasible
-    return True
+    # Handles drop before pick constraint
+    route_perms = get_feasible_permutations(nodes)
+
+    # route_perms = [[1,11,7,5,15,17]]
+
+    solved_routes = []  # solved ordered routes
+    for route in route_perms:
+        feasible = True
+
+        # keep track of time, cost, personnel, time dropped
+        dropped = {i: -1 for i in J}
+        personnel = {i: 0 for i in P}
+        max_personnel = {i: 0 for i in P}
+        time = 0
+        route_cost = 0
+
+
+        past_node = DEPOT_DROP
+        node_index = 0
+        while node_index < len(route):
+            current_node = route[node_index]
+
+            # Travel to current node
+            time += ttv[v][past_node][current_node]
+            route_cost += tcv[v][past_node][current_node]
+
+            if current_node - jobs < 0:  # drop node
+                # update drop time for this job
+                dropped[current_node] = time
+
+                # Add personnel
+                for p in P:
+                    personnel[p] += jt[current_node][p]
+                    # update max_personnel
+                    if personnel[p] > max_personnel[p]:
+                        max_personnel[p] = personnel[p]
+            else:  # pick node
+                diff = time - dropped[current_node-jobs]
+                if diff < st[current_node-jobs]:
+                    # have to wait for job to finish
+                    time += st[current_node-jobs]-diff
+
+                # Subtract personnel
+                for p in P:
+                    personnel[p] -= jt[current_node-jobs][p]
+
+            # determine feasibility ----------------
+            # Time Window
+            if time > mt[v][t]:
+                feasible = False
+                break
+
+            # Personnel Available
+            for p in P:
+                if personnel[p] > nt[p][t]:
+                    feasible = False
+                    break
+
+            # Ship Capacity
+            if sum(max_personnel.values()) > c[v]:
+                feasible = False
+                break
+            # --------------------------------------
+
+            past_node = current_node
+            node_index += 1
+
+        # travel to depot
+        time += ttv[v][current_node][DEPOT_PICK]
+        route_cost += tcv[v][current_node][DEPOT_PICK]
+
+        for p in P:
+            route_cost += tc[p, t]*max_personnel[p]
+
+        # recheck time constraint
+        if time > mt[v][t]:
+            feasible = False
+
+        if feasible:
+            solved_routes.append((route, route_cost, max_personnel))
+            print(time)
+            print(route_cost)
+            print(route)
+
+    # Get best route
+    if len(solved_routes) > 0:
+        for route, r_c, personnel in solved_routes:
+            routes[v,t,R] = route
+            cost[v,t,R] = r_c
+            for j in N_d:
+                service[v, t, R, j] = 1 if j in J else 0
+            for p in P:
+                techs[v,t,R,p] = personnel[p]
+            route_indexes[v,t].append(R)
+            R += 1
+        window[frozenset(J), v] = (t, mt[v][t], True, solved_routes)
+        return True
+    else:
+        window[frozenset(J), v] = (t, mt[v][t], False, -1)
+        return False
 
 """
 HELPER METHODS
 """
-def ordered_route(milp, X, N):
-    node = DEPOT_DROP
-    ordered_route = [node]
-    while node != DEPOT_PICK:
-        for n in N:
-            if X[node, n].x == 1:
-                node = n
-                ordered_route.append(node)
-    return ordered_route
+
+def get_feasible_permutations(nodes):
+    """
+    sourced from itertools.permutations
+    adjusted to include constraints
+    """
+    perms = []
+    permut(perms, [], nodes)
+    return perms
+
+def permut(perms, perm, left):
+    if len(left) == 0:
+        perms.append(perm)
+        return
+    else:
+        for i in left:
+            new_perm = perm.copy()
+            new_perm.append(i)
+            new_left = left.copy()
+            new_left.remove(i)
+            val = i - jobs
+            if val >= 0:  # pick node so must check if drop node is in list
+                if val not in perm:
+                    continue
+            permut(perms, new_perm, new_left)
+
+def get_best_route(routes_data):
+    """
+    get best route for set of routes
+
+    Params:
+        routes_data ( list( list(int), int, dict() ) ): route data including route, cost and personnel
+
+    Returns:
+        list(int): best route
+    """
+    best_cost = math.inf
+    best_personnel = {p: math.inf for p in P}
+    best_route = []
+    for data in routes_data:
+        if data[1] < best_cost:
+            better_p = True
+            for p in P:
+                if data[2][p] > best_personnel[p]:
+                    better_p = False
+            if better_p:
+                best_route = data[0]
+                best_cost = data[1]
+                best_personnel = data[2]
+
+    return best_route
 
 def generate_data():
     global ttv, tcv, tc, st, mt, c, jt, nt
@@ -222,3 +343,10 @@ def milp():
     generate_routes()
     return routes, cost, service, techs, route_indexes, R
 
+# print(get_feasible_permutations([0,10, 1, 11]))
+
+generate_data()
+solve_ordered_routes(1, 0, [0,1,2])
+
+
+# milp()

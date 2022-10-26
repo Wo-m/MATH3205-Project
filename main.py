@@ -1,10 +1,13 @@
 import milp
 import data_read
 from gurobipy import *
+import time
+import time
 
-depot_data, jobs_data, travel_data, general_data, vehicle_data = data_read.get_data(1, 10, 3, 1)
+depot_data, jobs_data, travel_data, general_data, vehicle_data = data_read.get_data(1, 10, 4, 1)
 
 def main():
+	start = time.time()
 	ordered_routes, route_cost, service, people, routes_vt, num_routes = milp.milp()
 	service_cost, people_max = generate_data()
 	# Sets
@@ -42,7 +45,9 @@ def main():
 				for p in P for t in T}
 
 	model.optimize()
+	end = time.time()
 
+	print('time', end-start)
 	for t in T:
 		print("========DAY={}========".format(t))
 		for v in V:

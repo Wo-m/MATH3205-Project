@@ -1,0 +1,17 @@
+
+.idea/Code.iml
+todo.md
+data/README.txt
+data/3/.DS_Store
+data/2/.DS_Store
+data/1/.DS_Store
+data/.DS_Store
+__pycache__/milp_model.cpython-39.pyc
+__pycache__/milp.cpython-39.pyc
+__pycache__/data_read.cpython-39.pyc
+.idea/workspace.xml
+.idea/vcs.xml
+.idea/modules.xml
+.idea/misc.xml
+.idea/inspectionProfiles/profiles_settings.xml
+.DS_Store

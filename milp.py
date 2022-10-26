@@ -4,7 +4,7 @@ import itertools
 from milp_model import *
 import time
 
-FOLDER, JOBS, PERIODS, INSTANCE = 1, 15, 5, 1
+FOLDER, JOBS, PERIODS, INSTANCE = 1, 10, 3, 1
 
 depot_data, jobs_data, travel_data, general_data, vehicle_data = data_read.get_data(FOLDER, JOBS, PERIODS, INSTANCE)
 
@@ -78,6 +78,7 @@ def recursive_generation(v, t, J, j_start):
 def solve_ordered_routes(v, t, J):
     """
     Solve all NODE permutations of the JOB set J
+    generates half routes
 
     Params:
         v (int): vehicle used
@@ -103,7 +104,7 @@ def solve_ordered_routes(v, t, J):
 
     # infeasible for smaller window, therefore infeasible set
     time = window.get((frozenset(J), v), -1)  # (period, window, feasibility, solved_routes)
-    if time != -1 and (not time[2] and time[1] <= mt[v][t]):  # infeasible for same or smaller window
+    if time != -1 and (not time[2] and time[1] >= mt[v][t]):  # infeasible for same or smaller window
         return False
     elif time != -1 and (time[2] and time[1] == mt[v][t]):  # solved for same time window)
         for route, r_c, personnel in time[3]:
@@ -137,7 +138,7 @@ def solve_ordered_routes(v, t, J):
         dropped = {i: -1 for i in J}
         personnel = {i: 0 for i in P}
         max_personnel = {i: 0 for i in P}
-        time = 0
+        time = 0.25
         route_cost = 0
 
 
@@ -147,7 +148,7 @@ def solve_ordered_routes(v, t, J):
             current_node = route[node_index]
 
             # Travel to current node
-            time += ttv[v][past_node][current_node]
+            time += ttv[v][past_node][current_node] + 0.25
             route_cost += tcv[v][past_node][current_node]
 
             if current_node - jobs < 0:  # drop node
@@ -192,7 +193,7 @@ def solve_ordered_routes(v, t, J):
             node_index += 1
 
         # travel to depot
-        time += ttv[v][current_node][DEPOT_PICK]
+        time += ttv[v][current_node][DEPOT_PICK] + 0.25
         route_cost += tcv[v][current_node][DEPOT_PICK]
 
         for p in P:

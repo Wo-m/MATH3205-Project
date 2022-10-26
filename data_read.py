@@ -18,14 +18,20 @@ def load_data(path: str, instance: str, periods):
     travel_path = path + "/" + TRAVEL_FILE.format(instance)
     general_path = path + "/" + GENERAL_FILE.format(instance)
 
-    # One type of data per file
-    depot_data = np.loadtxt(depots_path, delimiter=' ', skiprows=1)
-    jobs_data = np.loadtxt(jobs_path, delimiter=' ', skiprows=1, usecols=jobs_cols)
-    travel_data = np.loadtxt(travel_path, delimiter=' ')
 
     # General file contains general and vehicle info
     general_data = np.loadtxt(general_path, delimiter=' ', skiprows=1, max_rows=1)
     vehicle_data = np.loadtxt(general_path, delimiter=' ', skiprows=3)
+
+    travel_cols = (i for i in range(len(vehicle_data)))
+
+
+    # One type of data per file
+    depot_data = np.loadtxt(depots_path, delimiter=' ', skiprows=1)
+    jobs_data = np.loadtxt(jobs_path, delimiter=' ', skiprows=1, usecols=jobs_cols)
+    travel_data = np.loadtxt(travel_path, delimiter=' ', usecols=travel_cols)
+
+
 
     return depot_data, jobs_data, travel_data, general_data, vehicle_data
 

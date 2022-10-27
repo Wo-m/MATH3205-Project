@@ -2,7 +2,7 @@ import numpy as np
 import data_read
 from milp_model import *
 
-depot_data, jobs_data, travel_data, general_data, vehicle_data = data_read.get_data(1, 10, 4, 1)
+depot_data, jobs_data, travel_data, general_data, vehicle_data = data_read.get_data(1, 10, 3, 1)
 
 periods = int(general_data[0])
 jobs = int(general_data[1])  # also num of turbines
@@ -182,7 +182,7 @@ def generate_data():
                 ttv[v, i + d, DEPOT_DROP] = distance / t_rate + 0.25
 
                 tcv[v, DEPOT_DROP, i + d] = distance * c_rate
-                ttv[v, DEPOT_DROP, i + d] = distance / t_rate + 0.25
+                ttv[v, DEPOT_DROP, i + d] = distance / t_rate + 0.5
 
                 tcv[v, i + d, DEPOT_PICK] = distance * c_rate
                 ttv[v, i + d, DEPOT_PICK] = distance / t_rate + 0.25

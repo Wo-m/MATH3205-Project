@@ -2,14 +2,15 @@ import numpy as np
 import data_read
 from milp_model import *
 
-depot_data, jobs_data, travel_data, general_data, vehicle_data = data_read.get_data(1, 10, 3, 1)
+jobs_data = None
+vehicle_data = None
 
-periods = int(general_data[0])
-jobs = int(general_data[1])  # also num of turbines
-vehicles = int(general_data[2])
-people_types = int(general_data[3])
-DEPOT_DROP = 2*jobs
-DEPOT_PICK = 2*jobs+1
+periods = None
+jobs = None
+vehicles = None
+people_types = None
+DEPOT_DROP = None
+DEPOT_PICK = None
 
 R = 0
 
@@ -18,17 +19,17 @@ routes = {}  # route for vehicle v in period t on route r (dimensions will be ex
 cost = {}  # cost for vehicle v in period t on route r (dimensions will be expanded)
 service = {}  # is vehicle v servicing job j in period t on route r
 techs = {}  # number of reus of type p on vehicle v in period t on route r
-route_indexes = {(v, t): [] for v in range(vehicles) for t in range(periods)}
+route_indexes = {}
 
 # feasibility dicts
 window = {}
 route_parts = {}
 
 # SETS
-N_d = [n for n in range(0, jobs)]  # drop nodes
-N_p = [n for n in range(jobs, 2*jobs)]  # pick nodes
-N = [n for n in range(0, 2*jobs + 2)]  # drop + pick + depot nodes
-P = [p for p in range(people_types)]  # people types
+N_d = None # drop nodes
+N_p = None  # pick nodes
+N = None  # drop + pick + depot nodes
+P = None  # people types
 
 # DATA
 ttv = None  # travel time from node i to j for vehicle v
@@ -124,8 +125,25 @@ def ordered_route(milp, X, N):
                 ordered_route.append(node)
     return ordered_route
 
-def generate_data():
-    global ttv, tcv, tc, st, mt, c, jt, nt
+def generate_data(depot_data, jobs_data, travel_data, general_data, vehicle_data):
+    global ttv, tcv, tc, st, mt, c, jt, nt, periods, jobs, vehicles, people_types, \
+    DEPOT_DROP, DEPOT_PICK, route_indexes, N, N_p, N_d, P
+
+    periods = int(general_data[0])
+    jobs = int(general_data[1])  # also num of turbines
+    vehicles = int(general_data[2])
+    people_types = int(general_data[3])
+    DEPOT_DROP = 2*jobs
+    DEPOT_PICK = 2*jobs+1
+
+    route_indexes = {(v, t): [] for v in range(vehicles) for t in range(periods)}
+
+    N_d = [n for n in range(0, jobs)]
+    N_p = [n for n in range(jobs, 2*jobs)]
+    N = [n for n in range(0, 2*jobs + 2)]
+    P = [p for p in range(people_types)]
+
+
     ttv = np.zeros([vehicles, jobs*2+2, jobs*2+2])
     tcv = np.zeros([vehicles, jobs*2+2, jobs*2+2])
     st = np.zeros([len(jobs_data)])
@@ -190,8 +208,10 @@ def generate_data():
                 tcv[v, DEPOT_PICK, i + d] = distance * c_rate
                 ttv[v, DEPOT_PICK, i + d] = distance / t_rate + 0.25
 
-def milp():
-    generate_data()
+def main(depot_d, jobs_d, travel_d, general_d, vehicle_d):
+    global jobs_data, vehicle_data
+    jobs_data, vehicle_data = jobs_d, vehicle_d
+    generate_data(depot_d, jobs_d, travel_d, general_d, vehicle_d)
     generate_routes()
     return routes, cost, service, techs, route_indexes, R
 
